@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Inscripción - Campaña Esterilización Felina</title>
+  <style>
+    :root{
+      --bg:#f6f8fb;
+      --card:#fff;
+      --accent:#5b9ad6;
+      --muted:#666;
+      --success:#198754;
+    }
+    *{box-sizing:border-box}
+    body{font-family:Inter,system-ui,Arial; background:var(--bg); margin:0; padding:2rem; color:#111}
+    .container{max-width:780px; margin:0 auto}
+    .card{background:var(--card); padding:1.2rem; border-radius:12px; box-shadow:0 6px 18px rgba(20,30,60,0.06)}
+    h1{margin:0 0 .25rem}
+    p.lead{margin:.25rem 0 1rem; color:var(--muted)}
+    form{display:grid; gap:.8rem}
+    label{font-size:.9rem}
+    input[type="text"], input[type="number"]{
+      width:100%; padding:.6rem .7rem; border:1px solid #e3e7ee; border-radius:8px; font-size:1rem;
+    }
+    button{
+      background:var(--accent); color:#fff; border:0; padding:.7rem 1rem; border-radius:10px; cursor:pointer; font-weight:600;
+    }
+    .result{margin-top:1rem; padding:.9rem; border-radius:10px; background:#f3ffef; border:1px solid rgba(25,135,84,0.12)}
+    .small{font-size:.88rem; color:var(--muted)}
+    .list{margin-top:1rem}
+    .slot{padding:.6rem; border-radius:8px; background:#f7f9fc; border:1px solid #eef3fb; display:flex; justify-content:space-between; gap:.5rem}
+    .actions{display:flex; gap:.5rem; margin-top:.6rem}
+    .btn-ghost{background:transparent; border:1px solid #dfe7f5; color:#164a7c; padding:.5rem .7rem; border-radius:8px}
+    footer{
+      text-align:center;
+      font-size:.85rem;
+      color:var(--muted);
+      margin-top:1rem;
+    }
+    @media (max-width:520px){ body{padding:1rem} }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <h1>Inscribe a tu gato 🐱</h1>
+      <p class="lead">Campaña de esterilización — Fechas disponibles: <strong>26, 27 y 28 de septiembre de 2025</strong>. El sistema asignará día y hora automáticamente.</p>
+
+      <form id="form">
+        <div>
+          <label for="ownerName">Tu nombre (responsable)</label><br>
+          <input id="ownerName" type="text" placeholder="Ej: María Pérez" required>
+        </div>
+
+        <div>
+          <label for="catName">Nombre del gato</label><br>
+          <input id="catName" type="text" placeholder="Ej: Pelusa" required>
+        </div>
+
+        <div>
+          <label for="catAge">Edad del gato (años)</label><br>
+          <input id="catAge" type="number" min="0" step="0.1" placeholder="Ej: 2" required>
+          <div class="small">Si no sabes exactamente, coloca aproximadamente (ej. 0.5 para 6 meses).</div>
+        </div>
+
+        <div class="actions">
+          <button type="submit">Inscribir y asignar hora</button>
+          <button id="clearBtn" type="button" class="btn-ghost">Limpiar datos guardados</button>
+        </div>
+      </form>
+
+      <div id="confirmation" style="display:none" class="result" aria-live="polite"></div>
+
+      <div class="list card" style="margin-top:1rem;">
+        <h3 style="margin:0 0 .5rem">Inscripciones actuales (este dispositivo)</h3>
+        <div id="registrationsList" class="small"></div>
+      </div>
+
+      <p class="small" style="margin-top:.8rem">Nota: las inscripciones se guardan localmente en el navegador para evitar duplicar la misma franja aquí. Si vas a usar otro dispositivo, las franjas pueden repetirse. Puedo ayudarte a conectar esto a un backend (Google Sheets / Firebase) si quieres centralizar las reservas.</p>
+    </div>
+
+    <footer>
+      Programado por <strong>wilmis_pio</strong>
+    </footer>
+  </div>
+
+  <script>
+    const AVAILABLE_DATES = [
+      new Date(2025, 8, 26),
+      new Date(2025, 8, 27),
+      new Date(2025, 8, 28)
+    ];
+
+    function generateTimeSlots(){
+      const slots = [];
+      for(let h = 8; h <= 16; h++){
+        slots.push(`${String(h).padStart(2,'0')}:00`);
+        slots.push(`${String(h).padStart(2,'0')}:30`);
+      }
+      return slots;
+    }
+    const TIME_SLOTS = generateTimeSlots();
+
+    const STORAGE_KEY = 'esterilizacion_inscripciones_v1';
+
+    function loadRegistrations(){
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        return raw ? JSON.parse(raw) : [];
+      } catch(e){
+        console.error(e);
+        return [];
+      }
+    }
+    function saveRegistrations(arr){
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(arr));
+    }
+
+    const form = document.getElementById('form');
+    const ownerNameInput = document.getElementById('ownerName');
+    const catNameInput = document.getElementById('catName');
+    const catAgeInput = document.getElementById('catAge');
+    const confirmation = document.getElementById('confirmation');
+    const registrationsList = document.getElementById('registrationsList');
+    const clearBtn = document.getElementById('clearBtn');
+
+    function renderList(){
+      const regs = loadRegistrations();
+      if(regs.length === 0){
+        registrationsList.innerHTML = '<em>No hay inscripciones todavía en este dispositivo.</em>';
+        return;
+      }
+      registrationsList.innerHTML = regs.map(r=>{
+        return `<div class="slot">
+          <div>
+            <strong>${escapeHtml(r.catName)}</strong> — ${escapeHtml(r.ownerName)}<br>
+            <span class="small">${escapeHtml(r.catAge)} años</span>
+          </div>
+          <div style="text-align:right">
+            <div><strong>${r.dateStr}</strong></div>
+            <div class="small">${r.time}</div>
+          </div>
+        </div>`;
+      }).join('<div style="height:.5rem"></div>');
+    }
+
+    function escapeHtml(s){
+      return String(s).replace(/[&<>"']/g, function(m){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])});
+    }
+
+    function assignSlot(){
+      const regs = loadRegistrations();
+      const pool = [];
+      for(const d of AVAILABLE_DATES){
+        const dateISO = d.toISOString().slice(0,10);
+        for(const t of TIME_SLOTS){
+          pool.push({dateISO, time:t});
+        }
+      }
+      const taken = new Set(regs.map(r => `${r.dateISO}|${r.time}`));
+      const free = pool.filter(p => !taken.has(`${p.dateISO}|${p.time}`));
+      if(free.length === 0){
+        return null;
+      }
+      const sel = free[Math.floor(Math.random()*free.length)];
+      const d = new Date(sel.dateISO + 'T00:00:00');
+      const opts = { weekday:'long', year:'numeric', month:'long', day:'numeric' };
+      const dateStr = d.toLocaleDateString('es-ES', opts);
+      return { dateISO: sel.dateISO, time: sel.time, dateStr };
+    }
+
+    form.addEventListener('submit', function(e){
+      e.preventDefault();
+      const ownerName = ownerNameInput.value.trim();
+      const catName = catNameInput.value.trim();
+      const catAge = catAgeInput.value.trim();
+
+      if(!ownerName || !catName || catAge === '') {
+        alert('Completa todos los campos.');
+        return;
+      }
+
+      const ageNum = Number(catAge);
+      if(Number.isNaN(ageNum) || ageNum < 0) {
+        alert('Ingresa una edad válida.');
+        return;
+      }
+
+      const assigned = assignSlot();
+      if(!assigned){
+        confirmation.style.display = 'block';
+        confirmation.innerHTML = `<strong>Lo sentimos.</strong> Todas las franjas están ocupadas (en este dispositivo).`;
+        return;
+      }
+
+      const regs = loadRegistrations();
+      const entry = {
+        ownerName, catName, catAge: String(catAge),
+        dateISO: assigned.dateISO, time: assigned.time, dateStr: assigned.dateStr,
+        createdAt: new Date().toISOString()
+      };
+      regs.push(entry);
+      saveRegistrations(regs);
+      renderList();
+
+      confirmation.style.display = 'block';
+      confirmation.innerHTML = `
+        <strong>¡Inscripción registrada!</strong><br>
+        <div style="margin-top:.5rem">
+          <strong>Gato:</strong> ${escapeHtml(catName)}<br>
+          <strong>Edad:</strong> ${escapeHtml(catAge)} años<br>
+          <strong>Responsable:</strong> ${escapeHtml(ownerName)}<br>
+          <strong>Fecha asignada:</strong> ${escapeHtml(assigned.dateStr)}<br>
+          <strong>Hora:</strong> ${escapeHtml(assigned.time)}
+        </div>
+      `;
+    });
+
+    clearBtn.addEventListener('click', ()=>{
+      if(confirm('¿Eliminar todas las inscripciones guardadas en este dispositivo?')) {
+        localStorage.removeItem(STORAGE_KEY);
+        renderList();
+        confirmation.style.display = 'none';
+      }
+    });
+
+    renderList();
+  </script>
+</body>
+</html>
